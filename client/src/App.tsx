@@ -6,6 +6,8 @@ import Footer from "@/components/layout/Footer";
 import DailyList from "@/pages/DailyList";
 import Patients from "@/pages/Patients";
 import Therapists from "@/pages/Therapists";
+import Activities from "@/pages/Activities";
+import PatientActivities from "@/pages/PatientActivities";
 import Reports from "@/pages/Reports";
 
 function Router() {
@@ -14,6 +16,8 @@ function Router() {
       <Route path="/" component={DailyList} />
       <Route path="/pacientes" component={Patients} />
       <Route path="/terapeutas" component={Therapists} />
+      <Route path="/atividades" component={Activities} />
+      <Route path="/atividades-pacientes" component={PatientActivities} />
       <Route path="/relatorios" component={Reports} />
       <Route component={NotFound} />
     </Switch>

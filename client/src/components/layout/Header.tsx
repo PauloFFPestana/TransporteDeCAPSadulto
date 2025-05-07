@@ -23,22 +23,32 @@ const Header = () => {
         <div className="container mx-auto">
           <div className="flex overflow-x-auto">
             <Link href="/">
-              <a className={`px-6 py-4 font-medium ${location === '/' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
-                <i className="ri-calendar-check-line mr-2"></i>Lista Diária
+              <a className={`px-5 py-4 font-medium ${location === '/' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
+                <i className="ri-calendar-check-line mr-2"></i>Transporte
+              </a>
+            </Link>
+            <Link href="/atividades">
+              <a className={`px-5 py-4 font-medium ${location === '/atividades' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
+                <i className="ri-calendar-event-line mr-2"></i>Atividades
+              </a>
+            </Link>
+            <Link href="/atividades-pacientes">
+              <a className={`px-5 py-4 font-medium ${location === '/atividades-pacientes' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
+                <i className="ri-user-settings-line mr-2"></i>Pacientes/Atividades
               </a>
             </Link>
             <Link href="/pacientes">
-              <a className={`px-6 py-4 font-medium ${location === '/pacientes' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
+              <a className={`px-5 py-4 font-medium ${location === '/pacientes' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
                 <i className="ri-user-line mr-2"></i>Pacientes
               </a>
             </Link>
             <Link href="/terapeutas">
-              <a className={`px-6 py-4 font-medium ${location === '/terapeutas' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
+              <a className={`px-5 py-4 font-medium ${location === '/terapeutas' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
                 <i className="ri-mental-health-line mr-2"></i>Terapeutas
               </a>
             </Link>
             <Link href="/relatorios">
-              <a className={`px-6 py-4 font-medium ${location === '/relatorios' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
+              <a className={`px-5 py-4 font-medium ${location === '/relatorios' ? 'text-primary border-b-2 border-primary' : 'text-neutral-500 hover:text-primary'}`}>
                 <i className="ri-file-chart-line mr-2"></i>Relatórios
               </a>
             </Link>
