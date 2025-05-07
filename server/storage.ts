@@ -1,8 +1,14 @@
+import { and, eq, sql, or, desc, asc, isNull, not } from 'drizzle-orm';
+import { db } from './db';
 import { 
   patients, Patient, InsertPatient,
   therapists, Therapist, InsertTherapist,
-  appointments, Appointment, InsertAppointment,
-  AppointmentWithNames
+  activities, Activity, InsertActivity,
+  patientActivities, PatientActivity, InsertPatientActivity,
+  patientAbsences, PatientAbsence, InsertPatientAbsence,
+  therapistAbsences, TherapistAbsence, InsertTherapistAbsence,
+  ActivityWithNames, PatientActivityWithDetails, TransportListItem, WeeklySchedule,
+  daysOfWeekShort
 } from "@shared/schema";
 
 export interface IStorage {
@@ -18,13 +24,41 @@ export interface IStorage {
   createTherapist(therapist: InsertTherapist): Promise<Therapist>;
   updateTherapist(id: number, therapist: Partial<InsertTherapist>): Promise<Therapist | undefined>;
   
-  // Appointments
-  getAppointments(): Promise<Appointment[]>;
-  getAppointmentsForDate(date: string): Promise<AppointmentWithNames[]>;
-  getAppointment(id: number): Promise<Appointment | undefined>;
-  createAppointment(appointment: InsertAppointment): Promise<Appointment>;
-  updateAppointment(id: number, appointment: Partial<InsertAppointment>): Promise<Appointment | undefined>;
-  deleteAppointment(id: number): Promise<boolean>;
+  // Activities
+  getActivities(): Promise<Activity[]>;
+  getActivitiesWithNames(): Promise<ActivityWithNames[]>;
+  getActivitiesByDayOfWeek(dayOfWeek: string): Promise<ActivityWithNames[]>;
+  getActivity(id: number): Promise<Activity | undefined>;
+  createActivity(activity: InsertActivity): Promise<Activity>;
+  updateActivity(id: number, activity: Partial<InsertActivity>): Promise<Activity | undefined>;
+  deleteActivity(id: number): Promise<boolean>;
+  
+  // Patient Activities
+  getPatientActivities(): Promise<PatientActivity[]>;
+  getPatientActivitiesWithDetails(): Promise<PatientActivityWithDetails[]>;
+  getPatientActivitiesByPatientId(patientId: number): Promise<PatientActivityWithDetails[]>;
+  getPatientActivity(id: number): Promise<PatientActivity | undefined>;
+  createPatientActivity(patientActivity: InsertPatientActivity): Promise<PatientActivity>;
+  updatePatientActivity(id: number, patientActivity: Partial<InsertPatientActivity>): Promise<PatientActivity | undefined>;
+  deletePatientActivity(id: number): Promise<boolean>;
+  
+  // Patient Absences
+  getPatientAbsences(): Promise<PatientAbsence[]>;
+  getPatientAbsencesByDate(date: string): Promise<PatientAbsence[]>;
+  getPatientAbsencesByPatientId(patientId: number): Promise<PatientAbsence[]>;
+  createPatientAbsence(patientAbsence: InsertPatientAbsence): Promise<PatientAbsence>;
+  deletePatientAbsence(id: number): Promise<boolean>;
+  
+  // Therapist Absences
+  getTherapistAbsences(): Promise<TherapistAbsence[]>;
+  getTherapistAbsencesByDate(date: string): Promise<TherapistAbsence[]>;
+  getTherapistAbsencesByTherapistId(therapistId: number): Promise<TherapistAbsence[]>;
+  createTherapistAbsence(therapistAbsence: InsertTherapistAbsence): Promise<TherapistAbsence>;
+  deleteTherapistAbsence(id: number): Promise<boolean>;
+  
+  // Transport List
+  getTransportListForDate(date: string): Promise<TransportListItem[]>;
+  getWeeklyTransportSchedule(startDate: string): Promise<WeeklySchedule>;
   
   // Stats
   getTransportStats(date: string): Promise<{
@@ -34,250 +68,387 @@ export interface IStorage {
   }>;
 }
 
-export class MemStorage implements IStorage {
-  private patients: Map<number, Patient>;
-  private therapists: Map<number, Therapist>;
-  private appointments: Map<number, Appointment>;
-  
-  private patientIdCounter: number;
-  private therapistIdCounter: number;
-  private appointmentIdCounter: number;
-
-  constructor() {
-    this.patients = new Map();
-    this.therapists = new Map();
-    this.appointments = new Map();
-    
-    this.patientIdCounter = 1;
-    this.therapistIdCounter = 1;
-    this.appointmentIdCounter = 1;
-    
-    // Add some initial data
-    this.initializeData();
-  }
-  
-  private initializeData() {
-    // Add some patients
-    const patient1 = {
-      id: this.patientIdCounter++,
-      name: "Maria Silva",
-      phone: "(11) 98765-4321",
-      address: "Rua das Flores, 123",
-      active: true
-    };
-    
-    const patient2 = {
-      id: this.patientIdCounter++,
-      name: "João Santos",
-      phone: "(11) 91234-5678",
-      address: "Av. Central, 456",
-      active: true
-    };
-    
-    const patient3 = {
-      id: this.patientIdCounter++,
-      name: "Pedro Almeida",
-      phone: "(11) 99876-5432",
-      address: "Rua do Pinheiro, 789",
-      active: true
-    };
-    
-    this.patients.set(patient1.id, patient1);
-    this.patients.set(patient2.id, patient2);
-    this.patients.set(patient3.id, patient3);
-    
-    // Add some therapists
-    const therapist1 = {
-      id: this.therapistIdCounter++,
-      name: "Dr. Carlos Oliveira",
-      specialty: "Fisioterapia",
-      email: "carlos.oliveira@exemplo.com",
-      phone: "(11) 97777-8888",
-      workDays: "Seg,Qua,Sex",
-      active: true
-    };
-    
-    const therapist2 = {
-      id: this.therapistIdCounter++,
-      name: "Dra. Ana Pereira",
-      specialty: "Terapia Ocupacional",
-      email: "ana.pereira@exemplo.com",
-      phone: "(11) 96666-7777",
-      workDays: "Ter,Qui",
-      active: true
-    };
-    
-    const therapist3 = {
-      id: this.therapistIdCounter++,
-      name: "Dr. Bruno Costa",
-      specialty: "Fonoaudiologia",
-      email: "bruno.costa@exemplo.com",
-      phone: "(11) 95555-6666",
-      workDays: "Seg,Ter,Qua,Qui,Sex",
-      active: true
-    };
-    
-    this.therapists.set(therapist1.id, therapist1);
-    this.therapists.set(therapist2.id, therapist2);
-    this.therapists.set(therapist3.id, therapist3);
-    
-    // Create a few appointments for today
-    const today = new Date().toISOString().split('T')[0];
-    
-    const appointment1 = {
-      id: this.appointmentIdCounter++,
-      patientId: patient1.id,
-      therapistId: therapist1.id,
-      date: today,
-      startTime: "09:30:00",
-      endTime: "10:30:00",
-      notes: "",
-      transportNeeded: true,
-      status: "confirmed"
-    };
-    
-    const appointment2 = {
-      id: this.appointmentIdCounter++,
-      patientId: patient2.id,
-      therapistId: therapist2.id,
-      date: today,
-      startTime: "10:00:00",
-      endTime: "11:00:00",
-      notes: "",
-      transportNeeded: true,
-      status: "absent_patient"
-    };
-    
-    const appointment3 = {
-      id: this.appointmentIdCounter++,
-      patientId: patient3.id,
-      therapistId: therapist3.id,
-      date: today,
-      startTime: "11:30:00",
-      endTime: "12:30:00",
-      notes: "",
-      transportNeeded: true,
-      status: "absent_therapist"
-    };
-    
-    this.appointments.set(appointment1.id, appointment1);
-    this.appointments.set(appointment2.id, appointment2);
-    this.appointments.set(appointment3.id, appointment3);
-  }
-
-  // Patient methods
+export class DatabaseStorage implements IStorage {
+  // Patients
   async getPatients(): Promise<Patient[]> {
-    return Array.from(this.patients.values());
+    return await db.select().from(patients).where(eq(patients.active, true));
   }
 
   async getPatient(id: number): Promise<Patient | undefined> {
-    return this.patients.get(id);
+    const [patient] = await db.select().from(patients).where(eq(patients.id, id));
+    return patient;
   }
 
   async createPatient(patient: InsertPatient): Promise<Patient> {
-    const id = this.patientIdCounter++;
-    const newPatient = { ...patient, id };
-    this.patients.set(id, newPatient);
+    const [newPatient] = await db.insert(patients).values(patient).returning();
     return newPatient;
   }
 
   async updatePatient(id: number, patientUpdate: Partial<InsertPatient>): Promise<Patient | undefined> {
-    const patient = this.patients.get(id);
-    if (!patient) {
-      return undefined;
-    }
-    
-    const updatedPatient = { ...patient, ...patientUpdate };
-    this.patients.set(id, updatedPatient);
+    const [updatedPatient] = await db
+      .update(patients)
+      .set(patientUpdate)
+      .where(eq(patients.id, id))
+      .returning();
     return updatedPatient;
   }
 
-  // Therapist methods
+  // Therapists
   async getTherapists(): Promise<Therapist[]> {
-    return Array.from(this.therapists.values());
+    return await db.select().from(therapists).where(eq(therapists.active, true));
   }
 
   async getTherapist(id: number): Promise<Therapist | undefined> {
-    return this.therapists.get(id);
+    const [therapist] = await db.select().from(therapists).where(eq(therapists.id, id));
+    return therapist;
   }
 
   async createTherapist(therapist: InsertTherapist): Promise<Therapist> {
-    const id = this.therapistIdCounter++;
-    const newTherapist = { ...therapist, id };
-    this.therapists.set(id, newTherapist);
+    const [newTherapist] = await db.insert(therapists).values(therapist).returning();
     return newTherapist;
   }
 
   async updateTherapist(id: number, therapistUpdate: Partial<InsertTherapist>): Promise<Therapist | undefined> {
-    const therapist = this.therapists.get(id);
-    if (!therapist) {
-      return undefined;
-    }
-    
-    const updatedTherapist = { ...therapist, ...therapistUpdate };
-    this.therapists.set(id, updatedTherapist);
+    const [updatedTherapist] = await db
+      .update(therapists)
+      .set(therapistUpdate)
+      .where(eq(therapists.id, id))
+      .returning();
     return updatedTherapist;
   }
 
-  // Appointment methods
-  async getAppointments(): Promise<Appointment[]> {
-    return Array.from(this.appointments.values());
+  // Activities
+  async getActivities(): Promise<Activity[]> {
+    return await db.select().from(activities).where(eq(activities.active, true));
   }
 
-  async getAppointmentsForDate(date: string): Promise<AppointmentWithNames[]> {
-    const appointments = Array.from(this.appointments.values())
-      .filter(appointment => appointment.date === date);
+  async getActivitiesWithNames(): Promise<ActivityWithNames[]> {
+    const result = await db.query.activities.findMany({
+      with: {
+        therapist: true
+      },
+      where: eq(activities.active, true)
+    });
+
+    return result.map(item => ({
+      ...item,
+      therapistName: item.therapist.name,
+      therapistSpecialty: item.therapist.specialty
+    }));
+  }
+
+  async getActivitiesByDayOfWeek(dayOfWeek: string): Promise<ActivityWithNames[]> {
+    const result = await db.query.activities.findMany({
+      with: {
+        therapist: true
+      },
+      where: and(
+        eq(activities.active, true),
+        eq(activities.dayOfWeek, dayOfWeek)
+      )
+    });
+
+    return result.map(item => ({
+      ...item,
+      therapistName: item.therapist.name,
+      therapistSpecialty: item.therapist.specialty
+    }));
+  }
+
+  async getActivity(id: number): Promise<Activity | undefined> {
+    const [activity] = await db.select().from(activities).where(eq(activities.id, id));
+    return activity;
+  }
+
+  async createActivity(activity: InsertActivity): Promise<Activity> {
+    const [newActivity] = await db.insert(activities).values(activity).returning();
+    return newActivity;
+  }
+
+  async updateActivity(id: number, activityUpdate: Partial<InsertActivity>): Promise<Activity | undefined> {
+    const [updatedActivity] = await db
+      .update(activities)
+      .set(activityUpdate)
+      .where(eq(activities.id, id))
+      .returning();
+    return updatedActivity;
+  }
+
+  async deleteActivity(id: number): Promise<boolean> {
+    const [deleted] = await db
+      .update(activities)
+      .set({ active: false })
+      .where(eq(activities.id, id))
+      .returning();
+    return !!deleted;
+  }
+
+  // Patient Activities
+  async getPatientActivities(): Promise<PatientActivity[]> {
+    return await db.select().from(patientActivities).where(eq(patientActivities.active, true));
+  }
+
+  async getPatientActivitiesWithDetails(): Promise<PatientActivityWithDetails[]> {
+    const result = await db.query.patientActivities.findMany({
+      with: {
+        patient: true,
+        activity: {
+          with: {
+            therapist: true
+          }
+        }
+      },
+      where: eq(patientActivities.active, true)
+    });
+
+    return result.map(item => ({
+      ...item,
+      patientName: item.patient.name,
+      activityName: item.activity.name,
+      dayOfWeek: item.activity.dayOfWeek,
+      startTime: item.activity.startTime,
+      endTime: item.activity.endTime,
+      therapistName: item.activity.therapist.name,
+      therapistSpecialty: item.activity.therapist.specialty
+    }));
+  }
+
+  async getPatientActivitiesByPatientId(patientId: number): Promise<PatientActivityWithDetails[]> {
+    const result = await db.query.patientActivities.findMany({
+      with: {
+        patient: true,
+        activity: {
+          with: {
+            therapist: true
+          }
+        }
+      },
+      where: and(
+        eq(patientActivities.active, true),
+        eq(patientActivities.patientId, patientId)
+      )
+    });
+
+    return result.map(item => ({
+      ...item,
+      patientName: item.patient.name,
+      activityName: item.activity.name,
+      dayOfWeek: item.activity.dayOfWeek,
+      startTime: item.activity.startTime,
+      endTime: item.activity.endTime,
+      therapistName: item.activity.therapist.name,
+      therapistSpecialty: item.activity.therapist.specialty
+    }));
+  }
+
+  async getPatientActivity(id: number): Promise<PatientActivity | undefined> {
+    const [patientActivity] = await db.select().from(patientActivities).where(eq(patientActivities.id, id));
+    return patientActivity;
+  }
+
+  async createPatientActivity(patientActivity: InsertPatientActivity): Promise<PatientActivity> {
+    const [newPatientActivity] = await db.insert(patientActivities).values(patientActivity).returning();
+    return newPatientActivity;
+  }
+
+  async updatePatientActivity(id: number, patientActivityUpdate: Partial<InsertPatientActivity>): Promise<PatientActivity | undefined> {
+    const [updatedPatientActivity] = await db
+      .update(patientActivities)
+      .set(patientActivityUpdate)
+      .where(eq(patientActivities.id, id))
+      .returning();
+    return updatedPatientActivity;
+  }
+
+  async deletePatientActivity(id: number): Promise<boolean> {
+    const [deleted] = await db
+      .update(patientActivities)
+      .set({ active: false })
+      .where(eq(patientActivities.id, id))
+      .returning();
+    return !!deleted;
+  }
+
+  // Patient Absences
+  async getPatientAbsences(): Promise<PatientAbsence[]> {
+    return await db.select().from(patientAbsences);
+  }
+
+  async getPatientAbsencesByDate(date: string): Promise<PatientAbsence[]> {
+    return await db.select().from(patientAbsences).where(eq(patientAbsences.date, date));
+  }
+
+  async getPatientAbsencesByPatientId(patientId: number): Promise<PatientAbsence[]> {
+    return await db.select().from(patientAbsences).where(eq(patientAbsences.patientId, patientId));
+  }
+
+  async createPatientAbsence(patientAbsence: InsertPatientAbsence): Promise<PatientAbsence> {
+    const [newPatientAbsence] = await db.insert(patientAbsences).values(patientAbsence).returning();
+    return newPatientAbsence;
+  }
+
+  async deletePatientAbsence(id: number): Promise<boolean> {
+    const result = await db.delete(patientAbsences).where(eq(patientAbsences.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Therapist Absences
+  async getTherapistAbsences(): Promise<TherapistAbsence[]> {
+    return await db.select().from(therapistAbsences);
+  }
+
+  async getTherapistAbsencesByDate(date: string): Promise<TherapistAbsence[]> {
+    return await db.select().from(therapistAbsences).where(eq(therapistAbsences.date, date));
+  }
+
+  async getTherapistAbsencesByTherapistId(therapistId: number): Promise<TherapistAbsence[]> {
+    return await db.select().from(therapistAbsences).where(eq(therapistAbsences.therapistId, therapistId));
+  }
+
+  async createTherapistAbsence(therapistAbsence: InsertTherapistAbsence): Promise<TherapistAbsence> {
+    const [newTherapistAbsence] = await db.insert(therapistAbsences).values(therapistAbsence).returning();
+    return newTherapistAbsence;
+  }
+
+  async deleteTherapistAbsence(id: number): Promise<boolean> {
+    const result = await db.delete(therapistAbsences).where(eq(therapistAbsences.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Transport List
+  async getTransportListForDate(date: string): Promise<TransportListItem[]> {
+    // Determine day of week from date
+    const jsDate = new Date(date);
+    const dayIndex = jsDate.getDay() - 1; // 0 = Monday, 4 = Friday
     
-    return appointments.map(appointment => {
-      const patient = this.patients.get(appointment.patientId);
-      const therapist = this.therapists.get(appointment.therapistId);
-      
-      return {
-        ...appointment,
-        patientName: patient?.name || 'Paciente desconhecido',
-        therapistName: therapist?.name || 'Terapeuta desconhecido',
-        therapistSpecialty: therapist?.specialty || 'Especialidade desconhecida'
-      };
-    }).sort((a, b) => a.startTime.localeCompare(b.startTime));
-  }
-
-  async getAppointment(id: number): Promise<Appointment | undefined> {
-    return this.appointments.get(id);
-  }
-
-  async createAppointment(appointment: InsertAppointment): Promise<Appointment> {
-    const id = this.appointmentIdCounter++;
-    const newAppointment = { ...appointment, id };
-    this.appointments.set(id, newAppointment);
-    return newAppointment;
-  }
-
-  async updateAppointment(id: number, appointmentUpdate: Partial<InsertAppointment>): Promise<Appointment | undefined> {
-    const appointment = this.appointments.get(id);
-    if (!appointment) {
-      return undefined;
+    if (dayIndex < 0 || dayIndex > 4) {
+      return []; // Weekend, no activities
     }
     
-    const updatedAppointment = { ...appointment, ...appointmentUpdate };
-    this.appointments.set(id, updatedAppointment);
-    return updatedAppointment;
+    const dayOfWeek = daysOfWeekShort[dayIndex];
+    
+    // Get all patient activities for this day of week
+    const patientActivitiesResult = await db.query.patientActivities.findMany({
+      with: {
+        patient: true,
+        activity: {
+          with: {
+            therapist: true
+          }
+        }
+      },
+      where: and(
+        eq(patientActivities.active, true),
+        eq(patientActivities.transportNeeded, true),
+        eq(activities.dayOfWeek, dayOfWeek)
+      )
+    });
+    
+    // Get all absences for this date
+    const patientAbsencesForDate = await this.getPatientAbsencesByDate(date);
+    const therapistAbsencesForDate = await this.getTherapistAbsencesByDate(date);
+    
+    // Create a set of absent patient IDs
+    const absentPatientIds = new Set(patientAbsencesForDate.map(a => a.patientId));
+    
+    // Create a set of absent therapist IDs
+    const absentTherapistIds = new Set(therapistAbsencesForDate.map(a => a.therapistId));
+    
+    // Group activities by patient
+    const patientActivitiesMap = new Map<number, any[]>();
+    
+    for (const pa of patientActivitiesResult) {
+      if (!patientActivitiesMap.has(pa.patientId)) {
+        patientActivitiesMap.set(pa.patientId, []);
+      }
+      
+      patientActivitiesMap.get(pa.patientId)?.push({
+        activityId: pa.activityId,
+        activityName: pa.activity.name,
+        therapistId: pa.activity.therapistId,
+        therapistName: pa.activity.therapist.name,
+        startTime: pa.activity.startTime,
+        endTime: pa.activity.endTime
+      });
+    }
+    
+    // Convert to transport list items
+    const transportList: TransportListItem[] = [];
+    
+    for (const [patientId, activities] of patientActivitiesMap.entries()) {
+      // Check if patient is absent
+      const isPatientAbsent = absentPatientIds.has(patientId);
+      
+      // Check if all therapists for this patient's activities are absent
+      const hasNonAbsentTherapist = activities.some(a => !absentTherapistIds.has(a.therapistId));
+      
+      // Patient is considered absent if:
+      // 1. They have a direct absence record, OR
+      // 2. All their therapists are absent (implying they don't need to come in)
+      const isAbsent = isPatientAbsent || !hasNonAbsentTherapist;
+      
+      // Get patient details
+      const patient = await this.getPatient(patientId);
+      
+      if (patient) {
+        transportList.push({
+          patientId,
+          patientName: patient.name,
+          activities,
+          isAbsent
+        });
+      }
+    }
+    
+    // Sort by patient name
+    return transportList.sort((a, b) => a.patientName.localeCompare(b.patientName));
   }
 
-  async deleteAppointment(id: number): Promise<boolean> {
-    return this.appointments.delete(id);
+  async getWeeklyTransportSchedule(startDate: string): Promise<WeeklySchedule> {
+    // Parse start date and generate dates for the week
+    const jsStartDate = new Date(startDate);
+    const dates = [];
+    
+    // Ensure we're starting from Monday
+    const dayOfWeek = jsStartDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday, go back 6 days, otherwise go back to Monday
+    jsStartDate.setDate(jsStartDate.getDate() - daysToSubtract);
+    
+    // Generate the 5 weekdays
+    for (let i = 0; i < 5; i++) {
+      const date = new Date(jsStartDate);
+      date.setDate(date.getDate() + i);
+      dates.push(date.toISOString().split('T')[0]);
+    }
+    
+    // Get transport lists for each day
+    const [monday, tuesday, wednesday, thursday, friday] = await Promise.all([
+      this.getTransportListForDate(dates[0]),
+      this.getTransportListForDate(dates[1]),
+      this.getTransportListForDate(dates[2]),
+      this.getTransportListForDate(dates[3]),
+      this.getTransportListForDate(dates[4])
+    ]);
+    
+    return {
+      monday,
+      tuesday,
+      wednesday,
+      thursday,
+      friday
+    };
   }
 
   // Stats methods
   async getTransportStats(date: string): Promise<{ total: number; confirmed: number; absent: number; }> {
-    const appointments = Array.from(this.appointments.values())
-      .filter(appointment => appointment.date === date && appointment.transportNeeded);
+    const transportList = await this.getTransportListForDate(date);
     
-    const total = appointments.length;
-    const confirmed = appointments.filter(a => a.status === "confirmed").length;
-    const absent = appointments.filter(a => a.status === "absent_patient" || a.status === "absent_therapist" || a.status === "cancelled").length;
+    const total = transportList.length;
+    const absent = transportList.filter(t => t.isAbsent).length;
+    const confirmed = total - absent;
     
     return { total, confirmed, absent };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
