@@ -231,6 +231,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Erro ao excluir atividade" });
     }
   });
+  
+  // Get patients by activity
+  app.get("/api/activities/:id/patients", async (req: Request, res: Response) => {
+    try {
+      const activityId = parseInt(req.params.id);
+      const patients = await storage.getPatientsByActivityId(activityId);
+      res.json(patients);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar pacientes da atividade", error: String(error) });
+    }
+  });
 
   // PATIENT ACTIVITIES API
   // Get all patient activities

@@ -1,4 +1,4 @@
-import { and, eq, sql, or, desc, asc, isNull, not } from 'drizzle-orm';
+import { and, eq, sql, or, desc, asc, isNull, not, inArray } from 'drizzle-orm';
 import { db } from './db';
 import { 
   patients, Patient, InsertPatient,
@@ -240,6 +240,21 @@ export class DatabaseStorage implements IStorage {
       therapistSpecialty: item.activity.therapist.specialty
     }));
   }
+  
+  // Nova função para obter pacientes por atividade
+  async getPatientsByActivityId(activityId: number): Promise<Patient[]> {
+    const result = await db.query.patientActivities.findMany({
+      with: {
+        patient: true
+      },
+      where: and(
+        eq(patientActivities.active, true),
+        eq(patientActivities.activityId, activityId)
+      )
+    });
+    
+    return result.map(item => item.patient);
+  }
 
   async getPatientActivity(id: number): Promise<PatientActivity | undefined> {
     const [patientActivity] = await db.select().from(patientActivities).where(eq(patientActivities.id, id));
@@ -289,7 +304,7 @@ export class DatabaseStorage implements IStorage {
 
   async deletePatientAbsence(id: number): Promise<boolean> {
     const result = await db.delete(patientAbsences).where(eq(patientAbsences.id, id));
-    return result.rowCount > 0;
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   // Therapist Absences
@@ -312,131 +327,169 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTherapistAbsence(id: number): Promise<boolean> {
     const result = await db.delete(therapistAbsences).where(eq(therapistAbsences.id, id));
-    return result.rowCount > 0;
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   // Transport List
   async getTransportListForDate(date: string): Promise<TransportListItem[]> {
-    // Determine day of week from date
-    const jsDate = new Date(date);
-    const dayIndex = jsDate.getDay() - 1; // 0 = Monday, 4 = Friday
-    
-    if (dayIndex < 0 || dayIndex > 4) {
-      return []; // Weekend, no activities
-    }
-    
-    const dayOfWeek = daysOfWeekShort[dayIndex];
-    
-    // Get all patient activities for this day of week
-    const patientActivitiesResult = await db.query.patientActivities.findMany({
-      with: {
-        patient: true,
-        activity: {
-          with: {
-            therapist: true
-          }
-        }
-      },
-      where: and(
-        eq(patientActivities.active, true),
-        eq(patientActivities.transportNeeded, true),
-        eq(activities.dayOfWeek, dayOfWeek)
-      )
-    });
-    
-    // Get all absences for this date
-    const patientAbsencesForDate = await this.getPatientAbsencesByDate(date);
-    const therapistAbsencesForDate = await this.getTherapistAbsencesByDate(date);
-    
-    // Create a set of absent patient IDs
-    const absentPatientIds = new Set(patientAbsencesForDate.map(a => a.patientId));
-    
-    // Create a set of absent therapist IDs
-    const absentTherapistIds = new Set(therapistAbsencesForDate.map(a => a.therapistId));
-    
-    // Group activities by patient
-    const patientActivitiesMap = new Map<number, any[]>();
-    
-    for (const pa of patientActivitiesResult) {
-      if (!patientActivitiesMap.has(pa.patientId)) {
-        patientActivitiesMap.set(pa.patientId, []);
+    try {
+      // Determine day of week from date
+      const jsDate = new Date(date);
+      const dayIndex = jsDate.getDay() - 1; // 0 = Monday, 4 = Friday
+      
+      if (dayIndex < 0 || dayIndex > 4) {
+        return []; // Weekend, no activities
       }
       
-      patientActivitiesMap.get(pa.patientId)?.push({
-        activityId: pa.activityId,
-        activityName: pa.activity.name,
-        therapistId: pa.activity.therapistId,
-        therapistName: pa.activity.therapist.name,
-        startTime: pa.activity.startTime,
-        endTime: pa.activity.endTime
+      const dayOfWeek = daysOfWeekShort[dayIndex];
+      
+      // Get all activities for this day of week
+      const activitiesForDay = await db.query.activities.findMany({
+        where: and(
+          eq(activities.active, true),
+          eq(activities.dayOfWeek, dayOfWeek)
+        ),
+        with: {
+          therapist: true
+        }
       });
-    }
-    
-    // Convert to transport list items
-    const transportList: TransportListItem[] = [];
-    
-    for (const [patientId, activities] of patientActivitiesMap.entries()) {
-      // Check if patient is absent
-      const isPatientAbsent = absentPatientIds.has(patientId);
       
-      // Check if all therapists for this patient's activities are absent
-      const hasNonAbsentTherapist = activities.some(a => !absentTherapistIds.has(a.therapistId));
+      // Get IDs of all activities for this day
+      const activityIds = activitiesForDay.map(activity => activity.id);
       
-      // Patient is considered absent if:
-      // 1. They have a direct absence record, OR
-      // 2. All their therapists are absent (implying they don't need to come in)
-      const isAbsent = isPatientAbsent || !hasNonAbsentTherapist;
+      if (activityIds.length === 0) {
+        return []; // No activities on this day
+      }
       
-      // Get patient details
-      const patient = await this.getPatient(patientId);
+      // Get all patient activities for these activities
+      const patientActivitiesResult = await db.query.patientActivities.findMany({
+        where: and(
+          eq(patientActivities.active, true),
+          inArray(patientActivities.activityId, activityIds)
+        ),
+        with: {
+          patient: true
+        }
+      });
       
-      if (patient) {
-        transportList.push({
-          patientId,
-          patientName: patient.name,
-          activities,
-          isAbsent
+      // Get all absences for this date
+      const patientAbsencesForDate = await this.getPatientAbsencesByDate(date);
+      const therapistAbsencesForDate = await this.getTherapistAbsencesByDate(date);
+      
+      // Create a set of absent patient IDs
+      const absentPatientIds = new Set(patientAbsencesForDate.map(a => a.patientId));
+      
+      // Create a set of absent therapist IDs
+      const absentTherapistIds = new Set(therapistAbsencesForDate.map(a => a.therapistId));
+      
+      // Create a map from activity ID to activity details
+      const activityMap = new Map();
+      for (const activity of activitiesForDay) {
+        activityMap.set(activity.id, {
+          id: activity.id,
+          name: activity.name,
+          therapistId: activity.therapistId,
+          therapistName: activity.therapist.name,
+          startTime: activity.startTime,
+          endTime: activity.endTime
         });
       }
+      
+      // Group activities by patient
+      const patientActivitiesMap = new Map<number, any[]>();
+      
+      for (const pa of patientActivitiesResult) {
+        if (!patientActivitiesMap.has(pa.patientId)) {
+          patientActivitiesMap.set(pa.patientId, []);
+        }
+        
+        const activity = activityMap.get(pa.activityId);
+        if (activity) {
+          patientActivitiesMap.get(pa.patientId)?.push({
+            activityId: pa.activityId,
+            activityName: activity.name,
+            therapistId: activity.therapistId,
+            therapistName: activity.therapistName,
+            startTime: activity.startTime,
+            endTime: activity.endTime
+          });
+        }
+      }
+      
+      // Convert to transport list items
+      const transportList: TransportListItem[] = [];
+      
+      for (const [patientId, activities] of patientActivitiesMap.entries()) {
+        // Check if patient is absent
+        const isPatientAbsent = absentPatientIds.has(patientId);
+        
+        // Check if all therapists for this patient's activities are absent
+        const hasNonAbsentTherapist = activities.some(a => !absentTherapistIds.has(a.therapistId));
+        
+        // Patient is considered absent if:
+        // 1. They have a direct absence record, OR
+        // 2. All their therapists are absent (implying they don't need to come in)
+        const isAbsent = isPatientAbsent || !hasNonAbsentTherapist;
+        
+        // Get patient details from the patient activities query
+        const patientInfo = patientActivitiesResult.find(pa => pa.patientId === patientId)?.patient;
+        
+        if (patientInfo) {
+          transportList.push({
+            patientId,
+            patientName: patientInfo.name,
+            activities,
+            isAbsent
+          });
+        }
+      }
+      
+      // Sort by patient name
+      return transportList.sort((a, b) => a.patientName.localeCompare(b.patientName));
+    } catch (error) {
+      console.error("Error in getTransportListForDate:", error);
+      throw error;
     }
-    
-    // Sort by patient name
-    return transportList.sort((a, b) => a.patientName.localeCompare(b.patientName));
   }
 
   async getWeeklyTransportSchedule(startDate: string): Promise<WeeklySchedule> {
-    // Parse start date and generate dates for the week
-    const jsStartDate = new Date(startDate);
-    const dates = [];
-    
-    // Ensure we're starting from Monday
-    const dayOfWeek = jsStartDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday, go back 6 days, otherwise go back to Monday
-    jsStartDate.setDate(jsStartDate.getDate() - daysToSubtract);
-    
-    // Generate the 5 weekdays
-    for (let i = 0; i < 5; i++) {
-      const date = new Date(jsStartDate);
-      date.setDate(date.getDate() + i);
-      dates.push(date.toISOString().split('T')[0]);
+    try {
+      // Parse start date and generate dates for the week
+      const jsStartDate = new Date(startDate);
+      const dates = [];
+      
+      // Ensure we're starting from Monday
+      const dayOfWeek = jsStartDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday, go back 6 days, otherwise go back to Monday
+      jsStartDate.setDate(jsStartDate.getDate() - daysToSubtract);
+      
+      // Generate the 5 weekdays
+      for (let i = 0; i < 5; i++) {
+        const date = new Date(jsStartDate);
+        date.setDate(date.getDate() + i);
+        dates.push(date.toISOString().split('T')[0]);
+      }
+      
+      // Get transport lists for each day
+      const [monday, tuesday, wednesday, thursday, friday] = await Promise.all([
+        this.getTransportListForDate(dates[0]),
+        this.getTransportListForDate(dates[1]),
+        this.getTransportListForDate(dates[2]),
+        this.getTransportListForDate(dates[3]),
+        this.getTransportListForDate(dates[4])
+      ]);
+      
+      return {
+        monday,
+        tuesday,
+        wednesday,
+        thursday,
+        friday
+      };
+    } catch (error) {
+      console.error("Error in getWeeklyTransportSchedule:", error);
+      throw error;
     }
-    
-    // Get transport lists for each day
-    const [monday, tuesday, wednesday, thursday, friday] = await Promise.all([
-      this.getTransportListForDate(dates[0]),
-      this.getTransportListForDate(dates[1]),
-      this.getTransportListForDate(dates[2]),
-      this.getTransportListForDate(dates[3]),
-      this.getTransportListForDate(dates[4])
-    ]);
-    
-    return {
-      monday,
-      tuesday,
-      wednesday,
-      thursday,
-      friday
-    };
   }
 
   // Stats methods
