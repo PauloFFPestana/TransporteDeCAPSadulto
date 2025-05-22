@@ -1,0 +1,15 @@
+# Dependências do Node.js
+node_modules/
+
+# Arquivos de ambiente (sensíveis!)
+.env
+.env.local
+
+# Arquivos do sistema/IDE
+.DS_Store
+.vscode/
+*.log
+
+# Pasta de build (se houver)
+dist/
+build/
