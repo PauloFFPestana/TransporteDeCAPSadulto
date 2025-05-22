@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 96.1%;
+  --foreground: 240 6% 10%;
+  --muted: 60 4.8% 95.9%;
+  --muted-foreground: 25 5.3% 44.7%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 20 14.3% 4.1%;
+  --card: 0 0% 100%;
+  --card-foreground: 20 14.3% 4.1%;
+  --border: 20 5.9% 90%;
+  --input: 20 5.9% 90%;
+  --primary: 212 90% 45%;
+  --primary-foreground: 211 100% 99%;
+  --secondary: 16 100% 50%;
+  --secondary-foreground: 210 9.8% 10%;
+  --accent: 128 61% 45%;
+  --accent-foreground: 213 10% 97%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 60 9.1% 97.8%;
+  --ring: 20 14.3% 4.1%;
+  --radius: 0.5rem;
+  --chart-1: 212 90% 45%;
+  --chart-2: 16 100% 50%;
+  --chart-3: 128 61% 45%;
+  --chart-4: 264 89% 65%;
+  --chart-5: 32 100% 48%;
+  --status-success: 121 68% 34%;
+  --status-warning: 44 95% 56%;
+  --status-error: 0 73% 56%;
+}
+
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --primary: 212 90% 45%;
+  --primary-foreground: 211 100% 99%;
+  --secondary: 16 100% 50%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 128 61% 45%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 240 4.9% 83.9%;
+  --radius: 0.5rem;
+  --chart-1: 212 90% 45%;
+  --chart-2: 16 100% 50%;
+  --chart-3: 128 61% 45%;
+  --chart-4: 264 89% 65%;
+  --chart-5: 32 100% 48%;
+  --status-success: 121 68% 34%;
+  --status-warning: 44 95% 56%;
+  --status-error: 0 73% 56%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+.card {
+  @apply bg-white rounded-lg shadow hover:shadow-md transition-all duration-200;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
