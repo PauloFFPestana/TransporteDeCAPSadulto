@@ -1,6 +1,15 @@
-node_modules
-dist
+# Dependências do Node.js
+node_modules/
+
+# Arquivos de ambiente (sensíveis!)
+.env
+.env.local
+
+# Arquivos do sistema/IDE
 .DS_Store
-server/public
-vite.config.ts.*
-*.tar.gz
+.vscode/
+*.log
+
+# Pasta de build (se houver)
+dist/
+build/
